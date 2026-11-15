@@ -12,9 +12,9 @@ Hope you like this！！！
 希望你喜欢！  
 # Bad Apple シェーダー
 娯楽のみ
-マインクラフトで遊びながら、Bad Apple!! を再生できます。
-シャドウ設定では、このシャドウの画質を調整できます
-弾幕はパワーだよ！！！   
+マインクラフトで遊びながら、Bad Apple!! を再生できます。  
+シャドウ設定では、このシャドウの画質を調整できます  
+弾幕はパワーだよ！！！     
 好きになってほしい！
 ![img8](https://cdn.modrinth.com/data/roTdzSEW/images/2a080986f23bbbacdcc053b108e29195574935eb.png)
 ![img4](https://cdn.modrinth.com/data/roTdzSEW/images/5eb0520b75121a91b974e2da05f2edb3e185dd9e.png)
