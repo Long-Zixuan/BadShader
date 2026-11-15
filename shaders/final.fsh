@@ -100,7 +100,7 @@ uniform float frameTimeCounter;   // 游戏运行时间(秒)，由 OptiFine/Iris
 #define VIDEO_ATLAS_W 5568        // 图集像素宽
 #define VIDEO_ATLAS_H 3132        // 图集像素高
 
-float isInBlack(vec2 uv)
+int isInBlack(vec2 uv)
 {
 	// 循环播放：当前时间 -> 帧号
 	float t = mod(frameTimeCounter, VIDEO_DURATION);
@@ -120,8 +120,8 @@ float isInBlack(vec2 uv)
 
 	vec4 vid = texture2D(colortex1, atlasUV);
 	float luma = (ch == 0) ? vid.r : (ch == 1) ? vid.g : (ch == 2) ? vid.b : vid.w;
-	if (luma < lumaThreshold) return float(TRUE);
-	return float(FALSE);
+	if (luma < lumaThreshold) return TRUE;
+	return FALSE;
 }
 
 
