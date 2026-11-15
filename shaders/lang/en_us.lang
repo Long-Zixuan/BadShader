@@ -33,6 +33,14 @@ option.TEXTURE_OUTLINE_STRENGTH.comment = The higher the value, the darker the c
 option.OUTLINE_THICKNESS = Texture Outline Width
 option.SHADOW_DISTANCE=Shadow Distance
 option.SHADOW_DISTANCE.comment=Maximum distance from the player where real-time shadows are rendered. Balance between shadow coverage and performance.\n\n§c[-] High values may impact performance."Auto" will use Render Distance in video settings as Shadow Distance
+option.OutlineDepthMultiplier = Outline Depth Multiplier
+option.OutlineDepthMultiplier.comment = Scales the outline strength based on depth
+option.OutlineDepthBias = Outline Depth Bias
+option.OutlineDepthBias.comment = Adjusts the falloff curve of the outline based on depth
+option.BAD_LINE = Bad Line
+option.BAD_LINE.comment = Adds a vertical color-inversion split on the left side of the screen
+option.BAD_LINE_VALUE = Bad Line Position
+option.BAD_LINE_VALUE.comment = Position of the split that inverts colors (0 = left edge, 1 = right edge)
 
 screen.Shadow = Shadow Settings
 screen.Outline = Outline Settings

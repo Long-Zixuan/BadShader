@@ -29,6 +29,14 @@ option.TEXTURE_OUTLINE_STRENGTH.comment = 该值越大，颜色越深。反之�
 option.OUTLINE_THICKNESS = 纹理描边宽度
 option.SHADOW_DISTANCE = 阴影距离
 option.SHADOW_DISTANCE.comment = 实时阴影渲染的最大距离。  §c[-] 该选项对性能影响较大，如果感觉卡顿，可尝试将此值改小。“自动”将会使用游戏视频设置中的渲染距离作为阴影距离
+option.OutlineDepthMultiplier = 描边深度倍率
+option.OutlineDepthMultiplier.comment = 基于深度调整描边强度的倍率
+option.OutlineDepthBias = 描边深度偏置
+option.OutlineDepthBias.comment = 调整描边随深度衰减的曲线
+option.BAD_LINE = 分割线
+option.BAD_LINE.comment = 在画面左侧加入颜色反转效果
+option.BAD_LINE_VALUE = 分割线位置
+option.BAD_LINE_VALUE.comment = 颜色反转区域的分界位置（0 为最左，1 为最右）
 
 
 screen.Shadow = 阴影设置
