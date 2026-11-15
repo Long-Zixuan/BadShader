@@ -83,17 +83,17 @@ float SobelSampleDepth(vec2 uv, vec3 offset)
    return SobelDepth(pixelCenter, pixelLeft, pixelRight, pixelUp, pixelDown);
 }
 
-// ===== 视频播放：帧图集纹理(每格 4 帧 RGBA)，按时间逐帧采样 =====
+// ===== 视频播放：帧图集纹理(每格 3 帧 RGB)，按时间逐帧采样 =====
 uniform sampler2D colortex1;      // 视频帧图集(由 shaders.properties 绑定 texture/video.png)
 uniform float frameTimeCounter;   // 游戏运行时间(秒)，由 OptiFine/Iris 提供
 
 #define VIDEO_DURATION 217.766667 // 视频总时长(秒)
 #define VIDEO_FRAMES  3267        // 总帧数
-#define VIDEO_CELLS   817        // 图集格子数(每格 4 帧)
-#define VIDEO_GRID_X  29        // 图集列数
-#define VIDEO_GRID_Y  29        // 图集行数
-#define VIDEO_ATLAS_W 5568        // 图集像素宽
-#define VIDEO_ATLAS_H 3132        // 图集像素高
+#define VIDEO_CELLS   1089        // 图集格子数(每格 3 帧)
+#define VIDEO_GRID_X  33        // 图集列数
+#define VIDEO_GRID_Y  33        // 图集行数
+#define VIDEO_ATLAS_W 6336        // 图集像素宽
+#define VIDEO_ATLAS_H 3564        // 图集像素高
 
 float isInBlack(vec2 uv)
 {
@@ -101,20 +101,20 @@ float isInBlack(vec2 uv)
 	float t = mod(frameTimeCounter, VIDEO_DURATION);
 	int f = int(floor(t / VIDEO_DURATION * float(VIDEO_FRAMES)));
 
-	// 帧 -> 格子(每格 4 帧)与通道(R/G/B/A)
-	int c = f / 4;
-	int ch = f - c * 4;
+	// 帧 -> 格子(每格 3 帧)与通道(R/G/B)
+	int c = f / 3;
+	int ch = f - c * 3;
 	int gx = c % VIDEO_GRID_X;
 	int gy = c / VIDEO_GRID_X;
 
 	vec2 cell = 1.0 / vec2(float(VIDEO_GRID_X), float(VIDEO_GRID_Y));
 	vec2 px   = 1.0 / vec2(float(VIDEO_ATLAS_W), float(VIDEO_ATLAS_H));
-	// OpenGL 纹理 v=0 在图像底部，全屏 pass 的 uv.y=0 在顶部，故 y 翻转
-	float vRow = float(VIDEO_GRID_Y - 1 - gy);
+	// 全屏 pass 的 uv.y=0 在屏幕底部；纹理 v=0 在图像顶部，故格子行号直接用 gy，格内用 1-uv.y 翻转
+	float vRow = float(gy);
 	vec2 atlasUV = vec2(float(gx), vRow) * cell + px * 0.5 + vec2(uv.x, 1.0 - uv.y) * (cell - px);
 
 	vec4 vid = texture2D(colortex1, atlasUV);
-	float luma = (ch == 0) ? vid.r : (ch == 1) ? vid.g : (ch == 2) ? vid.b : vid.w;
+	float luma = (ch == 0) ? vid.r : (ch == 1) ? vid.g : vid.b;
 	if (luma < lumaThreshold) return float(TRUE);
 	return float(FALSE);
 }
