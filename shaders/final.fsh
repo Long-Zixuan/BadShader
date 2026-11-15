@@ -40,6 +40,10 @@ const float maxSpan = 8.0;
 uniform mat4 gbufferProjectionInverse;
 varying vec2 texcoord;
 
+// ===== Logo(视频最后 5 秒右下角显示) =====
+uniform sampler2D colortex2;   // logo 纹理(由 shaders.properties 绑定 texture/logo.png)
+#define LOGO_ASPECT 4.357      // 1024/235
+
 /* DRAWBUFFERS:0 */
 
 float screenSpaceToViewSpace(float depth, mat4 projInv) {
@@ -139,6 +143,38 @@ void main()
       color.y = 1 - color.y;
       color.z = 1 - color.z;
    }
+
+   // ===== 视频最后 5 秒：屏幕右下角显示 logo =====
+   if (mod(frameTimeCounter, VIDEO_DURATION) > VIDEO_DURATION - 5.0)
+   {
+      float margin = 0.035;
+      float logoW = 0.30;
+      float logoH = logoW * (viewWidth / viewHeight) / LOGO_ASPECT;
+      vec2 lo = vec2(1.0 - margin - logoW, margin);
+      vec2 hi = vec2(1.0 - margin, margin + logoH);
+      if (texcoord.x > lo.x && texcoord.x < hi.x && texcoord.y > lo.y && texcoord.y < hi.y)
+      {
+         vec2 lv = (texcoord - lo) / (hi - lo);
+         vec2 luv = vec2(lv.x, 1.0 - lv.y);
+         float la = texture2D(colortex2, luv).w;
+
+         // 深色描边，确保在任何背景上都清晰可见
+         vec2 tp = vec2(5.0 / 1024.0, 5.0 / 235.0);
+         float halo = 0.0;
+         halo = max(halo, texture2D(colortex2, luv + vec2( tp.x, 0.0)).w);
+         halo = max(halo, texture2D(colortex2, luv - vec2( tp.x, 0.0)).w);
+         halo = max(halo, texture2D(colortex2, luv + vec2(0.0,  tp.y)).w);
+         halo = max(halo, texture2D(colortex2, luv - vec2(0.0,  tp.y)).w);
+         halo = max(halo, texture2D(colortex2, luv + vec2( tp.x,  tp.y)).w);
+         halo = max(halo, texture2D(colortex2, luv + vec2(-tp.x,  tp.y)).w);
+         halo = max(halo, texture2D(colortex2, luv + vec2( tp.x, -tp.y)).w);
+         halo = max(halo, texture2D(colortex2, luv + vec2(-tp.x, -tp.y)).w);
+
+         color.rgb = mix(color.rgb, vec3(0.0), halo * 0.9);
+         color.rgb = mix(color.rgb, vec3(1.0), la);
+      }
+   }
+
    gl_FragData[0] = color;
 }
 
