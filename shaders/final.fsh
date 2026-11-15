@@ -21,6 +21,7 @@
 #define OutlineDepthMultiplier 2.0 // [0.1 0.2 0.3 0.4 0.5 0.6 0.7 0.8 0.9 1.0 1.1 1.2 1.3 1.4 1.5 1.6 1.7 1.8 1.9 2.0]
 #define OutlineDepthBias 0.5 // [0.1 0.2 0.3 0.4 0.5 0.6 0.7 0.8 0.9 1.0 1.1 1.2 1.3 1.4 1.5 1.6 1.7 1.8 1.9 2.0]
 #define BAD_LINE_VALUE 0.5 // [0.0 0.1 0.2 0.3 0.4 0.5 0.6 0.7 0.8 0.9 1.0]
+#define BAD_LINE OFF // [ON OFF]
 
 
 uniform float far;
@@ -137,42 +138,54 @@ void main()
    vec4 outlineCol = vec4(OUTLINE_COL,OUTLINE_COL,OUTLINE_COL,1);
 
    vec4 color = mix(sceneColor, outlineCol, sobelDepth);
-   if(isInBlack(texcoord) == TRUE)
+   if(BAD_LINE == OFF)
    {
-      color.x = 1 - color.x;
-      color.y = 1 - color.y;
-      color.z = 1 - color.z;
-   }
-
-   // ===== 视频最后 5 秒：屏幕右下角显示 logo =====
-   if (mod(frameTimeCounter, VIDEO_DURATION) > VIDEO_DURATION - 5.0)
-   {
-      float margin = 0.035;
-      float logoW = 0.30;
-      float logoH = logoW * (viewWidth / viewHeight) / LOGO_ASPECT;
-      vec2 lo = vec2(1.0 - margin - logoW, margin);
-      vec2 hi = vec2(1.0 - margin, margin + logoH);
-      if (texcoord.x > lo.x && texcoord.x < hi.x && texcoord.y > lo.y && texcoord.y < hi.y)
+      if(isInBlack(texcoord) == TRUE)
       {
-         vec2 lv = (texcoord - lo) / (hi - lo);
-         vec2 luv = vec2(lv.x, 1.0 - lv.y);
-         float la = texture2D(colortex2, luv).w;
-
-         // 深色描边，确保在任何背景上都清晰可见
-         vec2 tp = vec2(5.0 / 1024.0, 5.0 / 235.0);
-         float halo = 0.0;
-         halo = max(halo, texture2D(colortex2, luv + vec2( tp.x, 0.0)).w);
-         halo = max(halo, texture2D(colortex2, luv - vec2( tp.x, 0.0)).w);
-         halo = max(halo, texture2D(colortex2, luv + vec2(0.0,  tp.y)).w);
-         halo = max(halo, texture2D(colortex2, luv - vec2(0.0,  tp.y)).w);
-         halo = max(halo, texture2D(colortex2, luv + vec2( tp.x,  tp.y)).w);
-         halo = max(halo, texture2D(colortex2, luv + vec2(-tp.x,  tp.y)).w);
-         halo = max(halo, texture2D(colortex2, luv + vec2( tp.x, -tp.y)).w);
-         halo = max(halo, texture2D(colortex2, luv + vec2(-tp.x, -tp.y)).w);
-
-         color.rgb = mix(color.rgb, vec3(0.0), halo * 0.9);
-         color.rgb = mix(color.rgb, vec3(1.0), la);
+         color.x = 1 - color.x;
+         color.y = 1 - color.y;
+         color.z = 1 - color.z;
       }
+
+      // ===== 视频最后 5 秒：屏幕右下角显示 logo =====
+      if (mod(frameTimeCounter, VIDEO_DURATION) > VIDEO_DURATION - 5.0)
+      {
+         float margin = 0.035;
+         float logoW = 0.30;
+         float logoH = logoW * (viewWidth / viewHeight) / LOGO_ASPECT;
+         vec2 lo = vec2(1.0 - margin - logoW, margin);
+         vec2 hi = vec2(1.0 - margin, margin + logoH);
+         if (texcoord.x > lo.x && texcoord.x < hi.x && texcoord.y > lo.y && texcoord.y < hi.y)
+         {
+            vec2 lv = (texcoord - lo) / (hi - lo);
+            vec2 luv = vec2(lv.x, 1.0 - lv.y);
+            float la = texture2D(colortex2, luv).w;
+
+            // 深色描边，确保在任何背景上都清晰可见
+            vec2 tp = vec2(5.0 / 1024.0, 5.0 / 235.0);
+            float halo = 0.0;
+            halo = max(halo, texture2D(colortex2, luv + vec2( tp.x, 0.0)).w);
+            halo = max(halo, texture2D(colortex2, luv - vec2( tp.x, 0.0)).w);
+            halo = max(halo, texture2D(colortex2, luv + vec2(0.0,  tp.y)).w);
+            halo = max(halo, texture2D(colortex2, luv - vec2(0.0,  tp.y)).w);
+            halo = max(halo, texture2D(colortex2, luv + vec2( tp.x,  tp.y)).w);
+            halo = max(halo, texture2D(colortex2, luv + vec2(-tp.x,  tp.y)).w);
+            halo = max(halo, texture2D(colortex2, luv + vec2( tp.x, -tp.y)).w);
+            halo = max(halo, texture2D(colortex2, luv + vec2(-tp.x, -tp.y)).w);
+
+            color.rgb = mix(color.rgb, vec3(0.0), halo * 0.9);
+            color.rgb = mix(color.rgb, vec3(1.0), la);
+         }
+      }
+   }
+   if(BAD_LINE == ON)
+   {
+      if(texcoord.x < BAD_LINE_VALUE)
+      {
+         color.x = 1 - color.x;
+         color.y = 1 - color.y;
+         color.z = 1 - color.z;
+      } 
    }
 
    gl_FragData[0] = color;
