@@ -11,7 +11,7 @@ VIDEO = r"C:\Users\Long_\Documents\PCL破解视频\11月15日.mp4"
 FRAMES_DIR = r"D:\MC_MOD\Sobel\_encode"
 W, H = 192, 108
 FPS = 15
-CH = 3                  # 每格打包帧数(RGB 三通道，不用 alpha)
+CH = 4                  # 每格打包帧数(RGBA 四通道)
 DURATION = 217.766667
 FINAL_FSH = r"D:\MC_MOD\Sobel\shaders\final.fsh"
 PROPS = r"D:\MC_MOD\Sobel\shaders\shaders.properties"
@@ -35,12 +35,12 @@ for fp in files:
     with Image.open(fp) as im:
         frames.append(np.array(im.convert("L")))
 
-# ---------- 2. 每 3 帧打包进一个 RGB 格子 ----------
+# ---------- 2. 每 4 帧打包进一个 RGBA 格子 ----------
 cells = math.ceil(N / CH)
 cols = math.ceil(math.sqrt(cells))
 rows = math.ceil(cells / cols)
 atlas_w, atlas_h = cols * W, rows * H
-atlas = Image.new("RGB", (atlas_w, atlas_h), (0, 0, 0))
+atlas = Image.new("RGBA", (atlas_w, atlas_h), (0, 0, 0, 0))
 
 for c in range(cells):
     base = c * CH
@@ -49,8 +49,8 @@ for c in range(cells):
         idx = base + ch
         if idx < N:
             chans[ch] = frames[idx]
-    rgb = np.dstack((chans[0], chans[1], chans[2]))
-    cell = Image.fromarray(rgb, "RGB")
+    rgba = np.dstack((chans[0], chans[1], chans[2], chans[3]))
+    cell = Image.fromarray(rgba, "RGBA")
     gx, gy = c % cols, c // cols
     atlas.paste(cell, (gx * W, gy * H))
 
@@ -75,7 +75,7 @@ print("decode self-check OK")
 
 # ---------- 4. 写回 final.fsh ----------
 block = (
-    "// ===== 视频播放：帧图集纹理(每格 3 帧 RGB)，按时间逐帧采样 =====\n"
+    "// ===== 视频播放：帧图集纹理(每格 4 帧 RGBA)，按时间逐帧采样 =====\n"
     "uniform sampler2D colortex1;      // 视频帧图集(由 shaders.properties 绑定 texture/video.png)\n"
     "uniform float frameTimeCounter;   // 游戏运行时间(秒)，由 OptiFine/Iris 提供\n"
     "\n"
@@ -93,7 +93,7 @@ block = (
     "\tfloat t = mod(frameTimeCounter, VIDEO_DURATION);\n"
     "\tint f = int(floor(t / VIDEO_DURATION * float(VIDEO_FRAMES)));\n"
     "\n"
-    "\t// 帧 -> 格子(每格 %d 帧)与通道(R/G/B)\n"
+    "\t// 帧 -> 格子(每格 %d 帧)与通道(R/G/B/A)\n"
     "\tint c = f / %d;\n"
     "\tint ch = f - c * %d;\n"
     "\tint gx = c %% VIDEO_GRID_X;\n"
@@ -106,7 +106,7 @@ block = (
     "\tvec2 atlasUV = vec2(float(gx), vRow) * cell + px * 0.5 + vec2(uv.x, 1.0 - uv.y) * (cell - px);\n"
     "\n"
     "\tvec4 vid = texture2D(colortex1, atlasUV);\n"
-    "\tfloat luma = (ch == 0) ? vid.r : (ch == 1) ? vid.g : vid.b;\n"
+    "\tfloat luma = (ch == 0) ? vid.r : (ch == 1) ? vid.g : (ch == 2) ? vid.b : vid.w;\n"
     "\tif (luma < lumaThreshold) return float(TRUE);\n"
     "\treturn float(FALSE);\n"
     "}\n"
