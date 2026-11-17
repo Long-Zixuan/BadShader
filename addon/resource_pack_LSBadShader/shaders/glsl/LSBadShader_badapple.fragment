@@ -1,0 +1,299 @@
+// __multiversion__
+// This signals the loading code to prepend either #version 100 or #version 300 es as apropriate.
+//
+// ============================================================================
+//  LS Bad Shader · Bad Apple 光影 · 网易中国版自定义后处理
+//  移植来源：OptiFine 光影 shaders/final.fsh（LZX vscode 2025/03/24）
+//  核心逻辑（深度 Sobel 描边 / Bad Apple 帧图集反色 / 右下角 logo / BAD_LINE 反色条）
+//  逐行保留，仅把 OptiFine 的输入通道换成网易后处理的 uniform 与纹理槽位。
+// ============================================================================
+
+// 精度必须写在 #include 之前：头文件里的 PROJ / TIME 才会是 highp。
+// 描边用的 proj[2][2] + 1.0 只剩 4 位有效数字，mediump 下会算错。
+precision highp float;
+
+#include "fragmentVersionCentroidUV.h"
+#include "uniformPerFrameConstants.h"
+#include "uniformWorldConstants.h"
+
+// ---- 纹理槽位 -------------------------------------------------------------
+// depth_enable = true 时：0 = 场景颜色，2 = 深度图，bindTexture 依次占用 3~7
+LAYOUT_BINDING(0) uniform sampler2D TEXTURE_0;
+LAYOUT_BINDING(2) uniform sampler2D TEXTURE_2;
+LAYOUT_BINDING(3) uniform sampler2D TEXTURE_3;
+LAYOUT_BINDING(4) uniform sampler2D TEXTURE_4;
+
+// ---- 可调参数（post_process.json 的 paras 按顺序打包进 EXTRA_VECTOR）------
+// 10 个 float -> 3 个 vec4，缺的补冗余位：
+// EXTRA_VECTOR1 = (RIM_OFFECT, OUTLINE_COL, OutlineDepthMultiplier, OutlineDepthBias)
+// EXTRA_VECTOR2 = (BAD_LINE, BAD_LINE_VALUE, PAPER_WORLD, viewWidth)
+// EXTRA_VECTOR3 = (viewHeight, videoClock, -, -)
+uniform vec4 EXTRA_VECTOR1;
+uniform vec4 EXTRA_VECTOR2;
+uniform vec4 EXTRA_VECTOR3;
+
+#define RIM_OFFECT             (EXTRA_VECTOR1.x)
+#define OUTLINE_COL            (EXTRA_VECTOR1.y)
+#define OutlineDepthMultiplier (EXTRA_VECTOR1.z)
+#define OutlineDepthBias       (EXTRA_VECTOR1.w)
+#define BAD_LINE               (EXTRA_VECTOR2.x)
+#define BAD_LINE_VALUE         (EXTRA_VECTOR2.y)
+#define PAPER_WORLD            (EXTRA_VECTOR2.z)
+#define viewWidth              (EXTRA_VECTOR2.w)
+#define viewHeight             (EXTRA_VECTOR3.x)
+
+// ---- OptiFine 通道映射 ----------------------------------------------------
+#define colortex0        TEXTURE_0   // 场景颜色缓冲
+#define depthtex0        TEXTURE_2   // 深度缓冲
+#define colortex1        TEXTURE_3   // 视频帧图集 texture/video.png
+#define colortex2        TEXTURE_4   // logo 纹理 texture/logo.png
+#define texcoord         uv          // 全屏 pass 的屏幕坐标
+// 原 final.fsh 用 OptiFine 的 frameTimeCounter（一直累加的秒数）。
+// 网易引擎的 TIME 是「0~210 秒循环」的，视频总时长 217.77 秒，
+// 直接用 TIME 会在 210 秒处跳帧、并且永远看不到最后 5 秒的 logo。
+// 所以由 Python 每 tick 把「进世界后的真实秒数」写进 EXTRA_VECTOR3.y；
+// 在 Python 还没写进来之前（值为 0）先用 TIME 顶着，画面不会卡在第 0 帧。
+#define frameTimeCounter ((EXTRA_VECTOR3.y > 0.0) ? EXTRA_VECTOR3.y : TIME)
+
+// ---- 原 final.fsh 的宏与常量（保持不变）----------------------------------
+// 注意：原文件里的 #define a actualMaxDistance / #define p FALLOFF_CURVE 这两个
+// 单字符宏不能照搬——预处理器会把 sceneColor.a 这种成员的 .a 也替换掉，
+// 编译器直接报 "invalid character 'c' in swizzle"。
+// 这里改成在公式里直接写变量名，数学上与原来的 a / p 完全等价。
+#define FALLOFF_CURVE 0.0 // [-10.0 ... 10.0]
+
+#define TRUE 1
+#define FALSE 0
+
+#define OFF 0.0
+#define ON 1.0
+
+#define THRESHOLD 0.0001 // [0.005 ... 0.1]
+#define SCREEN_VALUE 2000.0
+
+// ===== Logo(视频最后 5 秒右下角显示) =====
+#define LOGO_ASPECT 4.357 // 1024/235
+
+// ===== 视频播放：帧图集纹理(每格 4 帧 RGBA)，按时间逐帧采样 =====
+#define VIDEO_DURATION 217.766667 // 视频总时长(秒)
+#define VIDEO_FRAMES  3267        // 总帧数
+#define VIDEO_CELLS   817         // 图集格子数(每格 4 帧)
+#define VIDEO_GRID_X  29          // 图集列数
+#define VIDEO_GRID_Y  29          // 图集行数
+#define VIDEO_ATLAS_W 5568        // 图集像素宽
+#define VIDEO_ATLAS_H 3132        // 图集像素高
+
+const float lumaThreshold = 0.5;
+const float mulReduce = 1.0 / 8.0;
+const float minReduce = 1.0 / 128.;
+const float maxSpan = 8.0;
+
+// OptiFine 里由引擎提供的 lsProjInv / far，网易后处理没有，
+// 这里由投影矩阵 PROJ 求出，函数体保持与原 final.fsh 一致。
+mat4 lsProjInv;
+float far;
+
+// 4x4 矩阵求逆（GLSL ES 2.0 没有 inverse()，这里手写一份，保证 GLES2/GLES3 都能编译）
+mat4 lsMat4Inverse(mat4 m)
+{
+	float a00 = m[0][0], a01 = m[0][1], a02 = m[0][2], a03 = m[0][3];
+	float a10 = m[1][0], a11 = m[1][1], a12 = m[1][2], a13 = m[1][3];
+	float a20 = m[2][0], a21 = m[2][1], a22 = m[2][2], a23 = m[2][3];
+	float a30 = m[3][0], a31 = m[3][1], a32 = m[3][2], a33 = m[3][3];
+
+	float b00 = a00 * a11 - a01 * a10;
+	float b01 = a00 * a12 - a02 * a10;
+	float b02 = a00 * a13 - a03 * a10;
+	float b03 = a01 * a12 - a02 * a11;
+	float b04 = a01 * a13 - a03 * a11;
+	float b05 = a02 * a13 - a03 * a12;
+	float b06 = a20 * a31 - a21 * a30;
+	float b07 = a20 * a32 - a22 * a30;
+	float b08 = a20 * a33 - a23 * a30;
+	float b09 = a21 * a32 - a22 * a31;
+	float b10 = a21 * a33 - a23 * a31;
+	float b11 = a22 * a33 - a23 * a32;
+
+	float det = b00 * b11 - b01 * b10 + b02 * b09 + b03 * b08 - b04 * b07 + b05 * b06;
+	if (abs(det) < 1e-12) {
+		return mat4(1.0);
+	}
+	float invDet = 1.0 / det;
+
+	mat4 r;
+	r[0][0] = ( a11 * b11 - a12 * b10 + a13 * b09) * invDet;
+	r[0][1] = (-a01 * b11 + a02 * b10 - a03 * b09) * invDet;
+	r[0][2] = ( a31 * b05 - a32 * b04 + a33 * b03) * invDet;
+	r[0][3] = (-a21 * b05 + a22 * b04 - a23 * b03) * invDet;
+	r[1][0] = (-a10 * b11 + a12 * b08 - a13 * b07) * invDet;
+	r[1][1] = ( a00 * b11 - a02 * b08 + a03 * b07) * invDet;
+	r[1][2] = (-a30 * b05 + a32 * b02 - a33 * b01) * invDet;
+	r[1][3] = ( a20 * b05 - a22 * b02 + a23 * b01) * invDet;
+	r[2][0] = ( a10 * b10 - a11 * b08 + a13 * b06) * invDet;
+	r[2][1] = (-a00 * b10 + a01 * b08 - a03 * b06) * invDet;
+	r[2][2] = ( a30 * b04 - a31 * b02 + a33 * b00) * invDet;
+	r[2][3] = (-a20 * b04 + a21 * b02 - a23 * b00) * invDet;
+	r[3][0] = (-a10 * b09 + a11 * b07 - a12 * b06) * invDet;
+	r[3][1] = ( a00 * b09 - a01 * b07 + a02 * b06) * invDet;
+	r[3][2] = (-a30 * b03 + a31 * b01 - a32 * b00) * invDet;
+	r[3][3] = ( a20 * b03 - a21 * b01 + a22 * b00) * invDet;
+	return r;
+}
+
+float screenSpaceToViewSpace(float depth, mat4 projInv) {
+	depth = depth * 2.0 - 1.0;
+	return projInv[3].z / (projInv[2].w * depth + projInv[3].w);
+}
+
+// 从投影矩阵推导远裁剪面（OptiFine 的 far uniform）
+float getFarPlane(mat4 proj) {
+	// 标准透视投影：proj[2][2] = -(f+n)/(f-n), proj[3][2] = -2fn/(f-n)
+	// => far = proj[3][2] / (proj[2][2] + 1.0)
+	float denom = proj[2][2] + 1.0;
+	float f = (abs(denom) > 1e-6) ? proj[3][2] / denom : 0.0;
+	// 注意 proj[3][2] / (proj[2][2] - 1.0) 恒等于 near，不能拿来当 far 的兜底；
+	// 矩阵约定不同（反向 Z / 正交）时退回一个安全距离，避免描边整体消失。
+	if (!(f > 0.0) || f > 1e6) {
+		f = 256.0;
+	}
+	return f;
+}
+
+float screenDepth2LinearDepth(float depth)
+{
+   float viewDepth = screenSpaceToViewSpace(depth, lsProjInv);
+   float linearDepth = max(-viewDepth, 0.0);
+   float actualMaxDistance = float(far);
+   if(FALLOFF_CURVE != 0.0)
+   {
+      // FALLOFF_CURVE 恒为 0.0，这里是原代码保留的分支（原来用 a / p 两个宏，
+      // 单字符宏会误伤 .a 成员，所以直接写变量名）；分母加 max() 是为了避免
+      // 移动端编译器把常量 exp(0)-1 == 0 的除法当错误（该分支实际不会执行）。
+      linearDepth = (exp(FALLOFF_CURVE * (linearDepth / actualMaxDistance)) - 1.0) / max(exp(FALLOFF_CURVE) - 1.0, 1e-6);
+   }
+   else
+   {
+      linearDepth /= actualMaxDistance;
+   }
+   linearDepth = 1.0 - linearDepth;
+   return linearDepth;
+}
+
+float SobelDepth(float ldc, float ldl, float ldr, float ldu, float ldd)
+{
+   return abs(ldl - ldc) +
+      abs(ldr - ldc) +
+      abs(ldu - ldc) +
+      abs(ldd - ldc);
+}
+
+float SobelSampleDepth(vec2 uv, vec3 offset)
+{
+   float pixelCenter = screenDepth2LinearDepth(texture2D(depthtex0, uv).r);
+   float pixelLeft = screenDepth2LinearDepth(texture2D(depthtex0, uv - offset.xz).r);
+   float pixelRight = screenDepth2LinearDepth(texture2D(depthtex0, uv + offset.xz).r);
+   float pixelUp = screenDepth2LinearDepth(texture2D(depthtex0, uv + offset.zy).r);
+   float pixelDown = screenDepth2LinearDepth(texture2D(depthtex0, uv - offset.zy).r);
+
+   return SobelDepth(pixelCenter, pixelLeft, pixelRight, pixelUp, pixelDown);
+}
+
+int isInBlack(vec2 uv)
+{
+	// 循环播放：当前时间 -> 帧号
+	float t = mod(frameTimeCounter, VIDEO_DURATION);
+	int f = int(floor(t / VIDEO_DURATION * float(VIDEO_FRAMES)));
+
+	// 帧 -> 格子(每格 4 帧)与通道(R/G/B/A)
+	int c = f / 4;
+	int ch = f - c * 4;
+	int gx = c % VIDEO_GRID_X;
+	int gy = c / VIDEO_GRID_X;
+
+	vec2 cell = 1.0 / vec2(float(VIDEO_GRID_X), float(VIDEO_GRID_Y));
+	vec2 px   = 1.0 / vec2(float(VIDEO_ATLAS_W), float(VIDEO_ATLAS_H));
+	// 全屏 pass 的 uv.y=0 在屏幕底部；纹理 v=0 在图像顶部，故格子行号直接用 gy，格内用 1-uv.y 翻转
+	float vRow = float(gy);
+	vec2 atlasUV = vec2(float(gx), vRow) * cell + px * 0.5 + vec2(uv.x, 1.0 - uv.y) * (cell - px);
+
+	vec4 vid = texture2D(colortex1, atlasUV);
+	float luma = (ch == 0) ? vid.r : (ch == 1) ? vid.g : (ch == 2) ? vid.b : vid.w;
+	if (luma < lumaThreshold) return TRUE;
+	return FALSE;
+}
+
+void main()
+{
+	// ---- 网易后处理的输入装配（原 final.fsh 由 OptiFine 直接提供）----
+	lsProjInv = lsMat4Inverse(PROJ);
+	far = getFarPlane(PROJ);
+
+	vec4 sceneColor = texture2D(colortex0, texcoord);
+
+	// gbuffers_textured.fsh：PAPER_WORLD 开启时世界颜色输出纯白，只保留深度描边
+	if(PAPER_WORLD == ON)
+	{
+		sceneColor = vec4(1.0, 1.0, 1.0, sceneColor.a);
+	}
+
+	vec3 offset = vec3((1.0 / max(viewWidth, 1.0)), (1.0 / max(viewHeight, 1.0)), 0.0) * RIM_OFFECT * SCREEN_VALUE;
+
+	float sobelDepth = SobelSampleDepth(texcoord, offset);
+
+	sobelDepth = pow(clamp(sobelDepth, 0.0, 1.0) * OutlineDepthMultiplier, OutlineDepthBias);
+
+	vec4 outlineCol = vec4(OUTLINE_COL, OUTLINE_COL, OUTLINE_COL, 1.0);
+
+	vec4 color = mix(sceneColor, outlineCol, sobelDepth);
+	if(BAD_LINE == OFF)
+	{
+		if(isInBlack(texcoord) == TRUE)
+		{
+			color.x = 1.0 - color.x;
+			color.y = 1.0 - color.y;
+			color.z = 1.0 - color.z;
+		}
+
+		// ===== 视频最后 5 秒：屏幕右下角显示 logo =====
+		if (mod(frameTimeCounter, VIDEO_DURATION) > VIDEO_DURATION - 5.0)
+		{
+			float margin = 0.035;
+			float logoW = 0.30;
+			float logoH = logoW * (viewWidth / viewHeight) / LOGO_ASPECT;
+			vec2 lo = vec2(1.0 - margin - logoW, margin);
+			vec2 hi = vec2(1.0 - margin, margin + logoH);
+			if (texcoord.x > lo.x && texcoord.x < hi.x && texcoord.y > lo.y && texcoord.y < hi.y)
+			{
+				vec2 lv = (texcoord - lo) / (hi - lo);
+				vec2 luv = vec2(lv.x, 1.0 - lv.y);
+				float la = texture2D(colortex2, luv).w;
+
+				// 深色描边，确保在任何背景上都清晰可见
+				vec2 tp = vec2(5.0 / 1024.0, 5.0 / 235.0);
+				float halo = 0.0;
+				halo = max(halo, texture2D(colortex2, luv + vec2( tp.x, 0.0)).w);
+				halo = max(halo, texture2D(colortex2, luv - vec2( tp.x, 0.0)).w);
+				halo = max(halo, texture2D(colortex2, luv + vec2(0.0,  tp.y)).w);
+				halo = max(halo, texture2D(colortex2, luv - vec2(0.0,  tp.y)).w);
+				halo = max(halo, texture2D(colortex2, luv + vec2( tp.x,  tp.y)).w);
+				halo = max(halo, texture2D(colortex2, luv + vec2(-tp.x,  tp.y)).w);
+				halo = max(halo, texture2D(colortex2, luv + vec2( tp.x, -tp.y)).w);
+				halo = max(halo, texture2D(colortex2, luv + vec2(-tp.x, -tp.y)).w);
+
+				color.rgb = mix(color.rgb, vec3(0.0), halo * 0.9);
+				color.rgb = mix(color.rgb, vec3(1.0), la);
+			}
+		}
+	}
+	if(BAD_LINE == ON)
+	{
+		if(texcoord.x < BAD_LINE_VALUE)
+		{
+			color.x = 1.0 - color.x;
+			color.y = 1.0 - color.y;
+			color.z = 1.0 - color.z;
+		}
+	}
+
+	gl_FragColor = color;
+}

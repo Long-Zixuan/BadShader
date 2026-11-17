@@ -1,0 +1,27 @@
+{
+    "format_version": "1.14.0",
+    "sound_definitions": {
+        "lsbadshader:badapple": {
+            "category": "music",
+            "sounds": [
+                {
+                    "name": "sounds/badapple",
+                    "volume": 1.0,
+                    "stream": true,
+                    "load_on_low_memory": false
+                }
+            ]
+        },
+        "lsbadshader.badapple": {
+            "category": "music",
+            "sounds": [
+                {
+                    "name": "sounds/badapple",
+                    "volume": 1.0,
+                    "stream": true,
+                    "load_on_low_memory": false
+                }
+            ]
+        }
+    }
+}

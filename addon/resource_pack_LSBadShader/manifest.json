@@ -1,0 +1,18 @@
+{
+    "format_version": 2,
+    "header": {
+        "name": "LSBadShader 资源包",
+        "description": "Bad Apple 光影 · 网易中国版移植（资源包：后处理着色器、视频图集、音效）",
+        "uuid": "1f8aec7b-2d3e-4de4-bf9b-9dde404388a2",
+        "version": [1, 0, 0],
+        "min_engine_version": [1, 16, 0]
+    },
+    "modules": [
+        {
+            "description": "LSBadShader 资源包",
+            "type": "resources",
+            "uuid": "4b223920-8221-48b0-af41-22b7e65cd5fc",
+            "version": [1, 0, 0]
+        }
+    ]
+}
