@@ -114,6 +114,7 @@ ne_be/
 | 埋点约定 | `// __multiversion__` → `precision highp float;` → `#include` → `LAYOUT_BINDING(n)` → `uniform vec4 EXTRA_VECTOR1` → `gl_FragColor` | 一致 |
 | `SetParameter` 时机 | 对「关闭状态」的自定义后处理写参数会被拒绝，能跑的作品先 `SetEnableByName(True)` 再写 | 同样先开再写 |
 | 界面文字 | 脚本跑在 Python 2，网易的绑定要 **UTF-8 字节串**；直接传 `u"中文"` 给 `AddText`/`AddToggle`/`AddSlider`/`RegisterSettingInst`，标签会渲染成空白（字体本身不缺中文） | 统一过 `Config.api_text()` 做 `encode("utf-8")` |
+| 上架审核 | 打包错误码 37【ManifestJsonError】：manifest 的 `min_engine_version` 缺失或**低于 1.18.0** 会被打回；官方示例用 `"format_version": 1` | 两个包都写 `min_engine_version: [1, 18, 0]`、`format_version: 1` |
 | 返回值判定 | `AddPostProcess` / `SetParameter` / `PlayCustomUIMusic` 在不同版本可能返回 `True` 或 `None` | 只有明确 `False` 才算失败，避免重复起播/反复重建 |
 
 **`videoClock` 是顺手修的一个真问题**：原来直接 `#define frameTimeCounter TIME`，
@@ -232,6 +233,7 @@ EXTRA_VECTOR3 = (screenHeight, videoClock, -, -)                        # p_c
 | 有描边、没有 Bad Apple 画面 | 帧图集贴图未加载（见限制 1），或 `bindTexture` 槽位被别的后处理占用 |
 | 画面完全没有后处理效果 | 日志里有没有 `AddPostProcess(...) -> True`；材质名与 `Config.MATERIAL_NAME`、`PROCESS_NAME` 是否都是 `LSBadShader_badapple`；`materials/common.json` 是否声明了 `materials/postprocess.material` |
 | 设置页里控件的文字是空白 | 传给 `AddText`/`AddToggle`/`AddSlider` 的文字必须是 UTF-8 字节串，用 `Config.api_text()` 包一层（直接传 `u"中文"` 就会空标签） |
+| 上架审核报「错误码 37 min_engine_version check error」 | 两个包的 `manifest.json` 里 `min_engine_version` 必须是 `[1, 18, 0]` 或更高，不能是 `[1, 16, 0]` 这种低版本 |
 | 日志报 `TypeError: 'module' object is not callable` | `modMain.py` 又被写回了「顶层 import 自己的系统模块」或「InitServer 里注册服务端系统」的写法，恢复成现在的模板形态 |
 | 音效不响 | `sounds/sound_definitions.json` 的 key 与 `LSBadShaderConfig.AUDIO_NAMES` 是否一致；`.ogg` 是否在 `sounds/` 下 |
 | 设置页里没有本模组 | `RegisterSettingInst` 第一个参数要换成平台分配的 ItemID（`LSBadShaderConfig.SETTING_ITEM_ID`） |

@@ -1,11 +1,11 @@
-{
-    "format_version": 2,
+﻿{
+    "format_version": 1,
     "header": {
         "name": "LSBadShader 行为包",
         "description": "Bad Apple 光影 · 网易中国版移植（行为包：模组设置与音频）",
         "uuid": "75402baa-f4c7-43a0-9aa2-2a8e0656e1c5",
         "version": [1, 0, 0],
-        "min_engine_version": [1, 16, 0]
+        "min_engine_version": [1, 18, 0]
     },
     "modules": [
         {
