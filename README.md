@@ -234,6 +234,7 @@ EXTRA_VECTOR3 = (screenHeight, videoClock, -, -)                        # p_c
 | 画面完全没有后处理效果 | 日志里有没有 `AddPostProcess(...) -> True`；材质名与 `Config.MATERIAL_NAME`、`PROCESS_NAME` 是否都是 `LSBadShader_badapple`；`materials/common.json` 是否声明了 `materials/postprocess.material` |
 | 设置页里控件的文字是空白 | 传给 `AddText`/`AddToggle`/`AddSlider` 的文字必须是 UTF-8 字节串，用 `Config.api_text()` 包一层（直接传 `u"中文"` 就会空标签） |
 | 上架审核报「错误码 37 min_engine_version check error」 | 两个包的 `manifest.json` 里 `min_engine_version` 必须是 `[1, 18, 0]` 或更高，不能是 `[1, 16, 0]` 这种低版本 |
+| 上架审核报「错误码 40 file manifest.json invalid json data」 | 文件本身 JSON 没错，多半是**带了 UTF-8 BOM**：Windows 上 `Set-Content -Encoding UTF8` / 记事本「UTF-8」都会写 BOM，平台解析器不容它。必须存成「UTF-8 无 BOM」，文件应以 `{`（0x7B）开头 |
 | 日志报 `TypeError: 'module' object is not callable` | `modMain.py` 又被写回了「顶层 import 自己的系统模块」或「InitServer 里注册服务端系统」的写法，恢复成现在的模板形态 |
 | 音效不响 | `sounds/sound_definitions.json` 的 key 与 `LSBadShaderConfig.AUDIO_NAMES` 是否一致；`.ogg` 是否在 `sounds/` 下 |
 | 设置页里没有本模组 | `RegisterSettingInst` 第一个参数要换成平台分配的 ItemID（`LSBadShaderConfig.SETTING_ITEM_ID`） |
