@@ -23,7 +23,7 @@ TEXTURE_OUTLINE_STRENGTH / OUTLINE_THICKNESS）在网易的全屏后处理管线
 
 MOD_NAME = "LSBadShader"
 MOD_VERSION = "1.0.0"
-MOD_DISPLAY_NAME = u"BadShader"
+MOD_DISPLAY_NAME = u"Bad Apple 光影"
 MOD_DESCRIPTION = u"Bad Apple 光影"
 
 
