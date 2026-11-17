@@ -16,6 +16,7 @@ except ImportError:  # 很老的 SDK 目录结构
     import client.extraClientApi as clientApi
 
 from LSBadShaderScripts import LSBadShaderConfig as Config
+from LSBadShaderScripts.LSBadShaderStore import LSBadShaderStore
 
 try:
     import time as _time
@@ -45,6 +46,8 @@ class LSBadShaderClientSystem(ClientSystem):
         self.mLogged = False
         self.mClockStart = None
         self.mTickCount = 0
+        self.mStore = LSBadShaderStore()
+        self.mStoreDirty = False
         self.ListenEvent()
         _log("client system init")
 
@@ -70,6 +73,7 @@ class LSBadShaderClientSystem(ClientSystem):
         _log("UiInitFinished")
         self.RefreshScreenSize()
         self.RegisterSettings()
+        self.LoadStore()
         self.ResetVideoClock()
         self.Apply()
         self.UpdateAudio(force=True)
@@ -80,6 +84,8 @@ class LSBadShaderClientSystem(ClientSystem):
 
     def OnClientTick(self, args=None):
         self.mTickCount += 1
+        if self.mStoreDirty:
+            self.SaveStore()
         if not self.mProcessReady:
             # 进世界早期后处理可能还建不起来，逐 tick 重试
             self.Apply()
@@ -265,6 +271,7 @@ class LSBadShaderClientSystem(ClientSystem):
             return
 
         self.RememberValue(key, value)
+        self.mStoreDirty = True
         self.Apply()
         self.UpdateAudio(force=(key == "volume"))
 
@@ -279,6 +286,57 @@ class LSBadShaderClientSystem(ClientSystem):
                 inst.SetSliderDefault(key, int(value))
         except Exception as exc:
             _log("RememberValue %s failed: %s" % (key, exc))
+
+    # ------------------------------------------------------------------
+    # 配置存档
+    # ------------------------------------------------------------------
+    def LoadStore(self):
+        """读取存档并覆盖默认值（存档优先于平台记住的默认值）。"""
+        data = self.mStore.Load()
+        if not data:
+            return
+        sliders = data.get("sliders")
+        toggles = data.get("toggles")
+        if not isinstance(sliders, dict):
+            sliders = {}
+        if not isinstance(toggles, dict):
+            toggles = {}
+
+        restored = 0
+        for key, kind, _name, _priority in Config.SETTING_SPECS:
+            try:
+                if kind == "slider" and key in sliders:
+                    value = int(sliders[key])
+                    self.mSliders[key] = value
+                    self.SetControlDefault(key, value)
+                    restored += 1
+                elif kind == "toggle" and key in toggles:
+                    value = bool(toggles[key])
+                    self.mToggles[key] = value
+                    self.SetControlDefault(key, value)
+                    restored += 1
+            except (TypeError, ValueError) as exc:
+                _log("LoadStore skip %s: %s" % (key, exc))
+        if restored:
+            _log("settings restored from store: %d" % restored)
+
+    def SaveStore(self):
+        """写存档（每 tick 最多写一次，避免拖动滑块时频繁落盘）。"""
+        self.mStoreDirty = False
+        self.mStore.Save(self.mSliders, self.mToggles)
+
+    def SetControlDefault(self, key, value):
+        """把存档值同步到控件默认值，下次打开设置页面显示的就是存档值。"""
+        inst = self.mSettingInst
+        if not inst:
+            return
+        try:
+            if key in Config.DEFAULT_TOGGLES:
+                inst.SetToggleDefault(key, bool(value))
+            elif key in Config.DEFAULT_SLIDERS:
+                inst.SetSliderDefault(key, int(value))
+        except Exception as exc:
+            _log("SetControlDefault %s failed: %s" % (key, exc))
 
     # ------------------------------------------------------------------
     # 音频：badapple.mp3
@@ -351,6 +409,7 @@ class LSBadShaderClientSystem(ClientSystem):
 
     # ------------------------------------------------------------------
     def Destroy(self):
+        self.SaveStore()
         self.StopAudio()
         try:
             post = self.GetPostComp()

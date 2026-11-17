@@ -69,6 +69,7 @@ ne_be/
     │       ├── __init__.py
     │       ├── modMain.py                   模组入口（只注册客户端系统）
     │       ├── LSBadShaderConfig.py         参数表、界面取值换算、后处理定义
+    │       ├── LSBadShaderStore.py          配置存档（全局 key/value 存储读写）
     │       └── LSBadShaderClientSystem.py   设置界面 + 后处理 + 音频 + 视频时钟
     └── resource_pack_LSBadShader/           资源包（着色器 / 贴图 / 音频）
         ├── manifest.json
@@ -248,3 +249,26 @@ EXTRA_VECTOR3 = (screenHeight, videoClock, -, -)                        # p_c
 | `shaders/texture/cel_ramp.png` / `ramp.png` / `blueNoiseR.png` | — | 只有 gbuffers 阶段的 CEL / PCF 噪声用得到，本次不移植 |
 | `shaders/gbuffers_*.fsh|vsh`、`shadow.*` | — | 网易后处理没有逐物体/阴影阶段，无法对位移植 |
 | `badapple_icon.png` | 两个包的 `pack_icon.png` + `textures/ui/LSBadShader_icon.png` | 原图，未重新生成 |
+
+---
+
+## 9. 配置存档
+
+设置界面上的取值会自动存档，退出游戏、换存档、重启客户端后保留。
+
+* 存储方式：网易的全局 key/value 存储
+  （`CreateConfigClient(levelId)` → `GetConfigData(key, True)` / `SetConfigData(key, data, True)`），
+  key 是 `ls_bad_shader_settings_v1`，`isGlobal=True` 表示所有存档共用一份，不写文件、不碰存档数据。
+* 存档结构：`{"version": 1, "sliders": {...}, "toggles": {...}}`，只存界面上的整数档位和开关。
+* 读取：每次 `UiInitFinished`（进入世界）在注册完设置后读一次。存档值**优先于**平台记住的默认值，
+  同时同步到控件默认值，所以打开设置页面看到的就是上次保存的值。缺字段、类型不对、存档损坏都按默认值走。
+* 写入：改动控件后只标脏，下一个 tick 写一次（拖动滑块不会频繁落盘）；卸载时（`Destroy`）再补写一次。
+* `CreateConfigClient` 不可用时静默降级：效果照常生效，只是不保存。
+
+改动范围（其余代码没动）：
+
+* 新增 `LSBadShaderScripts/LSBadShaderStore.py`
+* `LSBadShaderClientSystem.py` 里只加了：import、`__init__` 两个字段、
+  `OnUiInitFinished` 里的 `self.LoadStore()`、`OnClientTick` 里 `mStoreDirty` 时 `self.SaveStore()`、
+  `OnSettingChanged` 里 `self.mStoreDirty = True`、`Destroy` 里 `self.SaveStore()`，
+  以及三个新方法 `LoadStore()` / `SaveStore()` / `SetControlDefault()`。
