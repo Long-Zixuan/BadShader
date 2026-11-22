@@ -126,9 +126,9 @@ const vec2 offsets[64] = vec2[64](
 // PCF shadow sampling function
 float sPCF(sampler2D sTex, vec3 sSPos, float bRad){
     float sMap = 0.0;
-    float bNoise = texture(noisetex, gl_FragCoord.xy / vec2(noiseTextureResolution)).r;
+    float bNoise = texture2D(noisetex, gl_FragCoord.xy / vec2(noiseTextureResolution)).r;
     for(int i = 0; i < PCF_SAMPLE; i++){
-        sMap += step(sSPos.z, texture(sTex, sSPos.xy + (rot2D(bNoise * 6.28318531) * offsets[i] * bRad)).r);
+        sMap += step(sSPos.z, texture2D(sTex, sSPos.xy + (rot2D(bNoise * 6.28318531) * offsets[i] * bRad)).r);
     }
     return sMap / PCF_SAMPLE;
 }
@@ -249,6 +249,34 @@ void main()
     
     // Apply vertex color (biome tinting)
     col.rgb *= color.rgb;
+    #if ENABLE_SHADOWS == 0
+    // ---------------- Vanilla lighting (shadows disabled) ----------------
+    vec3 shad;
+    // Minecraft's block renderer bakes the directional shading into the vertex color,
+    // NOT into a per-pixel normal:
+    //   ModelBlockRenderer.renderModelFaceFlat / renderModelFaceAO
+    //     -> BlockAndTintGetter.getShade(Direction, boolean)
+    //         down = 0.5, up = 1.0, north/south = 0.8, west/east = 0.6
+    //     -> that constant is multiplied with the ambient occlusion and the biome tint
+    //     -> putQuadData() writes it as the vertex color
+    // The final vanilla pixel is then just:
+    //   texture * vertexColor * lightmap
+    // OptiFine/Iris expose that same vertex color as `color` (gl_Color), but only
+    // when `oldLighting=true` is set in shaders.properties (it is). With the default
+    // oldLighting=false the orientation multiplier is dropped and all block faces
+    // would get the same brightness, so this setting is required for vanilla parity.
+    // Since the multiplier is already in color, no N·L / normal term is needed here.
+    // Note: SHADOW_BRIGHTNESS / BLOCK_LIGHT_INTENSITY / LAMBERT_MODE only belong to
+    // the stylised shadowed path below and are intentionally ignored here.
+    shad = texture2D(lightmap, coord1.xy).rgb;
+
+        #if CEL == ON
+            // Cel shading is an explicit stylistic option; with CEL == OFF the light
+            // factor above is exactly the vanilla one.
+            float celLight = min(0.9999, max(shad.r, max(shad.g, shad.b)));
+            shad = vec3(texture2D(ramptex, vec2(celLight, 0.5)).a * 1.2);
+        #endif
+    #else
 
     #ifdef IS_IRIS
 
@@ -315,8 +343,8 @@ void main()
 					float sMap0 = sPCF(shadowtex0, sSPos, bRad);
 					float sMap1 = sPCF(shadowtex1, sSPos, bRad);
 				#else
-					float sMap0 = step(sSPos.z, texture(shadowtex0, sSPos.xy).r);
-					float sMap1 = step(sSPos.z, texture(shadowtex1, sSPos.xy).r);
+					float sMap0 = step(sSPos.z, texture2D(shadowtex0, sSPos.xy).r);
+					float sMap1 = step(sSPos.z, texture2D(shadowtex1, sSPos.xy).r);
 				#endif
 
 				#if COLORED_SHADOWS == 1
@@ -368,7 +396,7 @@ void main()
     #else
         shad = vec3(1) * lMap;
     #endif
-        
+    #endif
     col *= vec4(shad*(1.-blindness),1) + shine;
 
     // Apply entity color

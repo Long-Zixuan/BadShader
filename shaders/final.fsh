@@ -79,11 +79,11 @@ float SobelDepth(float ldc, float ldl, float ldr, float ldu, float ldd)
 
 float SobelSampleDepth(vec2 uv, vec3 offset)
 {
-   float pixelCenter = screenDepth2LinearDepth(texture(depthtex0, uv).r);
-   float pixelLeft = screenDepth2LinearDepth(texture(depthtex0, uv - offset.xz).r);
-   float pixelRight = screenDepth2LinearDepth(texture(depthtex0, uv + offset.xz).r);
-   float pixelUp = screenDepth2LinearDepth(texture(depthtex0, uv + offset.zy).r);
-   float pixelDown = screenDepth2LinearDepth(texture(depthtex0, uv - offset.zy).r);
+   float pixelCenter = screenDepth2LinearDepth(texture2D(depthtex0, uv).r);
+   float pixelLeft = screenDepth2LinearDepth(texture2D(depthtex0, uv - offset.xz).r);
+   float pixelRight = screenDepth2LinearDepth(texture2D(depthtex0, uv + offset.xz).r);
+   float pixelUp = screenDepth2LinearDepth(texture2D(depthtex0, uv + offset.zy).r);
+   float pixelDown = screenDepth2LinearDepth(texture2D(depthtex0, uv - offset.zy).r);
 
    return SobelDepth(pixelCenter, pixelLeft, pixelRight, pixelUp, pixelDown);
 }
@@ -127,7 +127,7 @@ int isInBlack(vec2 uv)
 
 void main() 
 {
-	vec4 sceneColor = texture(colortex0, texcoord);
+	vec4 sceneColor = texture2D(colortex0, texcoord);
 
    vec3 offset = vec3((1.0 / viewWidth), (1.0 / viewHeight), 0.0) * RIM_OFFECT * SCREEN_VALUE;
 
