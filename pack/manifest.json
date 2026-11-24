@@ -1,0 +1,29 @@
+{
+    "format_version":  2,
+    "header":  {
+        "name":  "BadShader",
+        "description":  "By LoongLy",
+        "uuid":  "b3d7e2a4-9c15-4f68-8e02-7a5b1c9d3e40",
+        "version":  [
+            1,
+            0,
+            9
+        ],
+        "min_engine_version":  [
+            1,
+            20,
+            15
+        ]
+    },
+    "modules":  [
+        {
+            "type":  "resources",
+            "uuid":  "c8e4f6b2-3a71-4d59-b1f8-6e2c0a7d9b53",
+            "version":  [
+                1,
+                0,
+                9
+            ]
+        }
+    ]
+}
